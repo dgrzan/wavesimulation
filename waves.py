@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import matplotlib.animation as animation
 from scipy import signal
+from netCDF4 import Dataset
 
 def iterateU(Uarray, Harray, index):
     global g
@@ -37,28 +38,28 @@ def iterateH(Uarraynext, Harray, Barray, index):
 
     return a
 
-def smooth(arrayh):
+def smooth(arrayhu):
     global n
 
     a = np.zeros(n)
 
     for i in range(n-1):
-        a[i] += (arrayh[i+1]-arrayh[i])*0.2*0.5
-        a[i+1] +=  (arrayh[i+1]-arrayh[i])*0.2*0.5*(-1)
+        a[i] += (arrayhu[i+1]-arrayhu[i])*0.15*0.5
+        a[i+1] +=  (arrayhu[i+1]-arrayhu[i])*0.15*0.5*(-1)
 
     for i in range(n):
-        arrayh[i] += a[i]
+        arrayhu[i] += a[i]
 
-    return arrayh
+    return arrayhu
 
 if __name__ == "__main__":
-    n = 1000     #number of bins
-    x = 111.0     #distance between bins
+    n = 100     #number of bins
+    x = 5585.0     #distance between bins
     t = 10    #time step between iterations
     g = 9.81     #strength of gravity
     d = 1000.0     #depth of water
     timesteps = 100     #number of iterations
-    passes = 2    #number of smoothing passes
+    passes = 1    #number of smoothing passes
     tmax = x/(math.sqrt(g*d))     #maximum time step allowed
 
     print("maximum t: {}".format(tmax))
@@ -71,14 +72,16 @@ if __name__ == "__main__":
     u = np.zeros(n)
 
     for i in range(n):
-        if i<(n/2+10) and i>(n/2-10):
-            h[i] = 1
-        if (i<=(n/2-10) and i>(n/2-20)) or (i>=(n/2+10) and i<(n/2+20)):
+        if i<(n/2+5) and i>(n/2-5):
             h[i] = 0
+        if (i<=(n/2-5) and i>(n/2-10)) or (i>=(n/2+5) and i<(n/2+10)):
+            h[i] = 0
+        if i==75:
+            h[i] = 1
 
     bathymetry = np.zeros(n)
     for i in range(n):
-        if i>n*0.75:
+        if i>n*0.6:
             bathymetry[i] = d
         else:
             bathymetry[i] = d
@@ -107,27 +110,56 @@ if __name__ == "__main__":
             
         finalh[i+1] = a
 
+        for k in range(passes):
+            finalh[i+1] = smooth(finalh[i+1])
+
+
+    simdata = Dataset("/home/davidgrzan/Tsunami/TestFiles/output1/testwaveFLAT.nc", 'r', format='NETCDF4')
+    times = np.array(simdata.variables['time'])
+    lats = np.array(simdata.variables['latitude'])
+    lons = np.array(simdata.variables['longitude'])
+    heightt = np.array(simdata.variables['height'])
+    level = np.array(simdata.variables['level'])
+    alt = simdata.variables['altitude']
+
+    #print(times[0],times[1],times[0]-times[1],len(times),times[100])
+    #print(lons.min(),lons.max(),lats.min(),lats.max(),len(lats),len(lons),lats[0]-lats[1])
+    #print(level.max())
+                     
+    
+            
     xaxis = np.zeros(n)
+    xaxis2 = np.zeros(n)
+    w = n-1
     for i in range(n):
         xaxis[i]=i*x
+        xaxis2[i]=w*x
+        w-=1
                
     fig, ax = plt.subplots()
     ln, = plt.plot([], [], 'b-', animated=True)
+    ln2, = plt.plot([], [], 'r-', animated=True)
     
     def init():
         ax.set_xlim(0,(n-1)*x)
-        ax.set_ylim(-1,1)
-        return ln,
+        ax.set_ylim(-0.5,0.5)
+        return ln, ln2, 
         
     def update(frame):
         ln.set_data(xaxis, finalh[frame])
-        return ln,
+        ln2.set_data(xaxis2, level[frame][50])
+        return ln, ln2,
         
     ani = FuncAnimation(fig, update, frames=timesteps+1, init_func=init, interval=100, blit=True)
-    
-    plt.show()
 
-    #Writer = animation.writers['ffmpeg']
-    #writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
-    
-    ani.save('waveanimation.mp4', writer='ffmpeg')
+    FFMpegWriter = animation.writers['ffmpeg']
+    metadata = dict(title='MySimulation', artist='Matplotlib', comment='Animation')
+    writer = FFMpegWriter(fps=15, metadata=metadata, bitrate=1000)
+
+    with writer.saving(fig, "comparison.mp4", 100):
+        for i in range(timesteps):
+            ln.set_data(xaxis, finalh[i])
+            ln2.set_data(xaxis2, level[i][50])
+            writer.grab_frame()
+
+    plt.show()
