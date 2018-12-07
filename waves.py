@@ -53,13 +53,13 @@ def smooth(arrayhu):
     return arrayhu
 
 if __name__ == "__main__":
-    n = 100     #number of bins
-    x = 5585.0     #distance between bins
-    t = 10    #time step between iterations
+    n = 250     #number of bins
+    x = 400.0     #distance between bins
+    t = 2.0    #time step between iterations
     g = 9.81     #strength of gravity
-    d = 1000.0     #depth of water
-    timesteps = 100     #number of iterations
-    passes = 1    #number of smoothing passes
+    d = 10.0     #depth of water
+    timesteps = 500     #number of iterations
+    passes = 0    #number of smoothing passes
     tmax = x/(math.sqrt(g*d))     #maximum time step allowed
 
     print("maximum t: {}".format(tmax))
@@ -72,12 +72,8 @@ if __name__ == "__main__":
     u = np.zeros(n)
 
     for i in range(n):
-        if i<(n/2+5) and i>(n/2-5):
-            h[i] = 0
-        if (i<=(n/2-5) and i>(n/2-10)) or (i>=(n/2+5) and i<(n/2+10)):
-            h[i] = 0
-        if i==75:
-            h[i] = 1
+        if i<(n/2+2) and i>(n/2-1):
+            h[i] = 0.1
 
     bathymetry = np.zeros(n)
     for i in range(n):
@@ -112,54 +108,29 @@ if __name__ == "__main__":
 
         for k in range(passes):
             finalh[i+1] = smooth(finalh[i+1])
-
-
-    simdata = Dataset("/home/davidgrzan/Tsunami/TestFiles/output1/testwaveFLAT.nc", 'r', format='NETCDF4')
-    times = np.array(simdata.variables['time'])
-    lats = np.array(simdata.variables['latitude'])
-    lons = np.array(simdata.variables['longitude'])
-    heightt = np.array(simdata.variables['height'])
-    level = np.array(simdata.variables['level'])
-    alt = simdata.variables['altitude']
-
-    #print(times[0],times[1],times[0]-times[1],len(times),times[100])
-    #print(lons.min(),lons.max(),lats.min(),lats.max(),len(lats),len(lons),lats[0]-lats[1])
-    #print(level.max())
-                     
-    
             
     xaxis = np.zeros(n)
-    xaxis2 = np.zeros(n)
-    w = n-1
     for i in range(n):
         xaxis[i]=i*x
-        xaxis2[i]=w*x
-        w-=1
                
     fig, ax = plt.subplots()
     ln, = plt.plot([], [], 'b-', animated=True)
-    ln2, = plt.plot([], [], 'r-', animated=True)
     
     def init():
-        ax.set_xlim(0,(n-1)*x)
-        ax.set_ylim(-0.5,0.5)
-        return ln, ln2, 
+        ax.set_xlim((n-1)*x*3/8,(n-1)*x*5/8)
+        ax.set_ylim(-0.02,0.1)
+        return ln,
         
     def update(frame):
         ln.set_data(xaxis, finalh[frame])
-        ln2.set_data(xaxis2, level[frame][50])
-        return ln, ln2,
+        return ln,
         
-    ani = FuncAnimation(fig, update, frames=timesteps+1, init_func=init, interval=100, blit=True)
+    ani = FuncAnimation(fig, update, frames=timesteps+1, init_func=init, interval=10, blit=True)
 
     FFMpegWriter = animation.writers['ffmpeg']
     metadata = dict(title='MySimulation', artist='Matplotlib', comment='Animation')
     writer = FFMpegWriter(fps=15, metadata=metadata, bitrate=1000)
 
-    with writer.saving(fig, "comparison.mp4", 100):
-        for i in range(timesteps):
-            ln.set_data(xaxis, finalh[i])
-            ln2.set_data(xaxis2, level[i][50])
-            writer.grab_frame()
-
+    ani.save("shallowwavetest250.mp4", writer=writer)
+    
     plt.show()
